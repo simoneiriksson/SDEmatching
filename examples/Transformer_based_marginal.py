@@ -12,7 +12,6 @@
 # with emission distribution $y_t \sim \mathcal N(y_t\vert z_t, 0.3^2)$ and initial conditions: $z_0 \sim \mathcal N(0, I_2)$
 
 # %%
-# first import packages:
 
 import os
 os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
@@ -27,7 +26,7 @@ from models import FunctionApproximatorModel, FunctionApproximatorModel_drift
 from SDEmatching.core.Marginal import Marginal
 from SDEmatching.models.Flows import DDPMflow, NormalFlow, AffineFlow
 from SDEmatching.core.SDE import SimpleSDE, SDE, manual_euler_sample
-from SDEmatching.utils.utils import torch_seed, to_tensor
+from SDEmatching.utils.utils import torch_seed, to_tensor, mask_and_pad
 import seaborn as sns
 from SDEmatching.utils.datageneration import SDEdatagenerator
 from SDEmatching.core.SDEproblem import SDEproblem
@@ -46,12 +45,10 @@ import pandas as pd
 num_timesteps = 30
 num_ts_samples = 30
 num_series = 20
-#num_samples = 10000
-state_dim = 2
 device = 'cuda' if torch.cuda.is_available() else 'mps' if torch.backends.mps.is_available() else 'cpu'
-#device="cpu"
 
 state_dim = 2
+observation_dim = state_dim
 t_start = -1
 t_end = 1
 time_dist = torch.distributions.Uniform(t_start, t_end)
@@ -86,30 +83,32 @@ generator_SDE = SDE(generator_drift, generator_diffusion, generator_prior, steps
 #list_of_timeseries = SDEdatagenerator(generator_SDE, generator_emission, time_dist, num_series=11, mean_num_ts=10, same_ts=False, num_ts_samples=None, device=device)
 
 # generate data
-list_of_timeseries, list_of_state_timeseries = SDEdatagenerator(generator_SDE, generator_emission, time_dist, num_series=num_series, same_ts=False, num_ts_samples=num_ts_samples, device=device, seed=2)
-
-# transform from list of tensors into one padded tensor
-longest_len = max([len(timeseries) for timeseries in list_of_timeseries])
-torch.nn.functional.pad(list_of_timeseries[0], pad=(0,0,0,longest_len-len(list_of_timeseries[0])), value=torch.nan)
-
-data = torch.stack([
-    torch.nn.functional.pad(timeseries, pad=(0,0,0,longest_len-len(timeseries)), value=torch.nan) 
-    for timeseries in list_of_timeseries]).detach().clone()
-
-true_state_series = torch.stack([state_timeseries for state_timeseries in list_of_state_timeseries]).detach().clone()
-
-data.shape
+#list_of_timeseries, list_of_state_timeseries = SDEdatagenerator(generator_SDE, generator_emission, time_dist, num_series=num_series, same_ts=False, num_ts_samples=num_ts_samples, device=device, seed=2)
+list_of_timeseries, list_of_state_timeseries = SDEdatagenerator(generator_SDE, generator_emission, time_dist, num_series=num_series, same_ts=False, mean_num_ts=num_ts_samples, device=device, seed=2)
 
 
 # %%
+true_state_series = torch.stack([state_timeseries for state_timeseries in list_of_state_timeseries]).detach().clone()
+data, emissions_mask = mask_and_pad(list_of_timeseries, list_of_state_timeseries, state_dim, device)
+
+# %%
 # Plotting some paths and emissions
-# cmap = matplotlib.colormaps["viridis"]
-# series_to_plot=min(5, data.shape[0])
-# for i in range(series_to_plot):
-#     color = cmap(i/series_to_plot)
-#     _=plt.plot(data[i,:,0].T.detach().cpu(), data[i,:,1].T.detach().cpu(), marker="x", linewidth=0, c=color)
-#     _=plt.plot(generator_SDE.ts.detach().cpu(), true_state_series[i,:,0].T.detach().cpu(), marker="", c=color)
-# plt.show()
+cmap = matplotlib.colormaps["viridis"]
+series_to_plot=min(5, data.shape[0])
+for i in range(series_to_plot):
+    color = cmap(i/series_to_plot)
+    if i == 0:
+        emmission_label = "emissions"
+        state_label = "true state"
+    else:        
+        emmission_label = None
+        state_label = None
+    
+    _=plt.plot(data[i, ~emissions_mask[i],0].T.detach().cpu(), data[i, ~emissions_mask[i],1].T.detach().cpu(), marker="x", linewidth=0, c=color, label=emmission_label)
+    _=plt.plot(generator_SDE.ts.detach().cpu(), true_state_series[i,:,0].T.detach().cpu(), marker="", c=color, label=state_label)
+    plt.xlabel("time")
+    plt.legend()
+plt.show()
 
 # %% [markdown]
 # ## Define model setup for training
@@ -123,26 +122,18 @@ data.shape
 # For now,  we initialize the parameters $A_\theta$, $\log \sigma_\theta$, $\log \sigma_y$, $\mu_I$ and $\log \sigma_I$ to the true valuse.
 
 # %%
-"""
-Defining solving models
-"""
 # Prior
 priormean = torch.zeros(state_dim, device=device)
-#prior_log_std = torch.ones(state_dim, device=device) * 0
 prior_log_std = true_prior_log_std.clone().detach()
 myprior = GaussianPrior(mean=priormean, log_std=prior_log_std, trainable=True, device=device)
 
 # Diffusion term
-#log_diff_func = FunctionApproximatorModel(num_features=0, hidden_layers=[], num_outputs=0, nonlin=torch.nn.ReLU(), seed=2, initial_zero=False, device=device)
-#mydiffusion = ScalarDiffusion(state_dim, state_dim, log_diff_func, device=device)
 mydiffusion = SimpleDiffusion(state_dim, state_dim, log_std=true_diffusion_log_std.clone().detach(), device=device, trainable=True)
-
 
 # Drift term
 mydrift = FunctionApproximatorModel_drift(num_features=state_dim, hidden_layers=[], num_outputs=state_dim, nonlin=torch.nn.ReLU(), seed=2, initial_zero=False, device=device, time_independent=True, bias=False)
-#mydrift.hidden_layers[0].weight.data=torch.tensor([[0.0, 2.0], [-2.0, 0.0]])
-# Emission
-#myemission = GaussianEmission(dim=state_dim, log_std=torch.tensor(.1).log(), trainable=True)
+
+# Emission distribution:
 myemission = GaussianEmission(dim=state_dim, log_std=true_emission_log_std.clone().detach(), trainable=True, device=device)
 
 
@@ -150,7 +141,6 @@ myemission = GaussianEmission(dim=state_dim, log_std=true_emission_log_std.clone
 # ## Building the marginal distribution
 
 # %%
-
 condition_mapper = TransformerLatentModel(obs_dim=state_dim, state_dim=state_dim, model_dim=128, time_embed_dim=32, n_heads=4, n_layers=3).to(device)
 marginal_func = AffineFlow(state_dim, device=device)
 myMarginal = Marginal(marginal_func, mydiffusion, condition_mapper, device=device)
@@ -202,9 +192,9 @@ save_models(true_parameter_dict, [generator_drift, generator_diffusion, generato
 
 # %%
 # Plotting the marginal distribution as it looks now
-# fig, axes = plot_marginal(mySDEproblem, data, state_dim, axes=None, true_states=true_state_series, 
-#                           true_states_ts=generator_SDE.ts, num_samples=100, max_num_data=3, device=device)
-# plt.show()
+fig, axes = plot_marginal(mySDEproblem, data, state_dim, axes=None, true_states=true_state_series, 
+                          true_states_ts=generator_SDE.ts, num_samples=100, max_num_data=3, device=device)
+plt.show()
 
 
 # %%
@@ -213,9 +203,11 @@ saved_parameter_dict = {}
 
 all_train_losses = []
 batch_size = 100
-max_step_no = 10000
+max_step_no = 1000
 with torch_seed(0):
-    train_loader_ = DataLoader(data, batch_size=batch_size)
+    #train_loader_ = DataLoader(data, batch_size=batch_size)
+    dataset = TensorDataset(data, emissions_mask, true_state_series)
+    train_loader_ = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 epoch_loss = []
 epoch_diffusion_loss = []
 epoch_prior_loss = []
@@ -229,8 +221,6 @@ epoch_steps = []
 step_no = 0
 #torch.random.manual_seed(0)
 epoch = 0
-
-# %%
 plot_every_epoch = 100
 plot_parameters_every_epoch = 100
 print_every_epoch = 10
@@ -243,7 +233,6 @@ optimizer1 = torch.optim.Adam(params_for_optim1, lr=lr1)
 optimizer2 = torch.optim.Adam(params_for_optim2, lr=lr2)
 scheduler=None
 
-
 # %%
 while True:
     epoch_loss.append(0) 
@@ -254,7 +243,7 @@ while True:
     epoch += 1
     save_models(saved_parameter_dict, models_to_be_saved)
 
-    for data_batch in train_loader_:
+    for data_batch, mask_batch, states_batch in train_loader_:
     #_, data_batch =next(enumerate(train_loader_))
         this_batch_size = len(data_batch)
         if step_no%100 == 0:
@@ -264,7 +253,7 @@ while True:
         mySDEproblem.train()
         optimizer1.zero_grad()
         optimizer2.zero_grad()
-        diffusion_loss, prior_loss, reconstruction_loss = mySDEproblem.ELBO(data_batch)
+        diffusion_loss, prior_loss, reconstruction_loss = mySDEproblem.ELBO(data_batch, mask_batch)
         sum_loss = (diffusion_loss + prior_loss*1 + reconstruction_loss).mean(dim=0)
         sum_loss.backward()
         all_train_losses.append(sum_loss.item())
@@ -299,21 +288,6 @@ while True:
     if step_no >= max_step_no: break
 
 
-all_train_losses_t = torch.tensor(all_train_losses)
-
-def moving_average(a, n=3):
-    ret = a.cumsum(dim=0)
-    ret[n:] = ret[n:] - ret[:-n]
-    return ret[n - 1:] / n
-
-train_loss_ma = moving_average(all_train_losses_t, 1000)
-plt.semilogy(train_loss_ma)
-plt.ylim(train_loss_ma.min(), torch.quantile(train_loss_ma, .95))
-plt.title("training loss history")
-plt.show()
-
-
-
 # %%
 
 all_train_losses_t = torch.tensor(all_train_losses)
@@ -323,11 +297,14 @@ def moving_average(a, n=3):
     ret[n:] = ret[n:] - ret[:-n]
     return ret[n - 1:] / n
 
-train_loss_ma = moving_average(all_train_losses_t, 1000)
-plt.semilogy(train_loss_ma)
-plt.ylim(train_loss_ma.min(), torch.quantile(train_loss_ma, .95))
+train_loss_ma = moving_average(all_train_losses_t, 10)
+plt.plot(train_loss_ma)
+plt.ylim(train_loss_ma.min(), torch.quantile(train_loss_ma, .99))
 plt.title("training loss history")
 plt.show()
+
+
+# %%
 
 
 

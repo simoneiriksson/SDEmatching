@@ -33,14 +33,14 @@ class TransformerContextEncoder(nn.Module):
         )
         self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=n_layers)
 
-    def forward(self, t, x):
+    def forward(self, t, x, padding_mask=None):
         # t: (B, T, 1), x: (B, T, obs_dim)
         z = self.embedding(t, x)           # (B, T, model_dim)
-        context = self.encoder(z)          # (B, T, model_dim)
+        context = self.encoder(z, src_key_padding_mask = padding_mask)          # (B, T, model_dim)
         return context                     # contextualized embeddings
 
 class TimeDecoder(nn.Module):
-    def __init__(self, model_dim, state_dim, time_bias_scale=0.1):
+    def __init__(self, model_dim, state_dim, time_bias_scale=0.1, padding_mask=None):
         super().__init__()
         self.query_embed = nn.Sequential(
             nn.Linear(1, model_dim),
@@ -50,7 +50,7 @@ class TimeDecoder(nn.Module):
         self.output = nn.Linear(model_dim, 2 * state_dim)
         self.scale = time_bias_scale
 
-    def forward(self, context, t_star, t_context):
+    def forward(self, context, t_star, t_context, padding_mask=None):
         """
         context:    (B, T, model_dim)
         t_star:     (B, 1)  — query time
@@ -69,6 +69,9 @@ class TimeDecoder(nn.Module):
         time_bias = -torch.abs(delta_t.squeeze(-1)) / self.scale  # (B, T)
         scores += time_bias.unsqueeze(1)                        # (B, 1, T)
 
+        if padding_mask is not None:
+            scores = scores.masked_fill(padding_mask.unsqueeze(1), float('-inf'))
+
         # Softmax + attention
         weights = torch.softmax(scores, dim=-1)                 # (B, 1, T)
         pooled = torch.einsum("bik,bkj->bij", weights, context) # (B, 1, model_dim)
@@ -85,9 +88,9 @@ class TransformerLatentModel(nn.Module):
         self.encoder = TransformerContextEncoder(obs_dim, model_dim, n_heads, n_layers, time_embed_dim)
         self.decoder = TimeDecoder(model_dim, state_dim)
 
-    def forward(self, t_star, data):
+    def forward(self, t_star, data, data_mask):
         t_obs = data[:, :, 0:1]    # shape: (B, T, 1)
         x_obs = data[:, :, 1:]     # shape: (B, T, obs_dim)
-        context = self.encoder(t_obs, x_obs)                       # (B, T, model_dim)
-        mu, log_sigma = self.decoder(context, t_star, t_obs)       # <== now passes t_obs too
+        context = self.encoder(t_obs, x_obs, padding_mask=data_mask)                       # (B, T, model_dim)
+        mu, log_sigma = self.decoder(context, t_star, t_obs, padding_mask=data_mask)       # <== now passes t_obs too
         return torch.cat([mu, log_sigma], dim=1)

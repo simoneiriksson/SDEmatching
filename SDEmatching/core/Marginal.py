@@ -71,7 +71,7 @@ class Marginal(nn.Module):
         if type(self.marginal_func) == nf.ConditionalNormalizingFlow: self.is_normflow = True
         else: self.is_normflow = False
 
-    def marginal_dt_(self, epsilon, t, data):
+    def marginal_dt_(self, epsilon, t, data, data_mask=None):
         """
         Computes the time derivative of the marginal function.
 
@@ -83,52 +83,57 @@ class Marginal(nn.Module):
         Returns:
             torch.Tensor: Time derivative (shape: [batch_size, state_dim]).
         """
+        if data_mask is None: data_mask = torch.zeros(data.shape[0], data.shape[1], dtype=torch.bool, device=data.device)
         # get the partial derivative dG(t, X, epsilon)/dt 
         # we make a functional forward 
         def marginal_func_wrapped(t, data, epsilon):
-            context = self.condition_mapper(t.unsqueeze(0), data.unsqueeze(0))
+            context = self.condition_mapper(t.unsqueeze(0), data.unsqueeze(0), data_mask.unsqueeze(0))
             return self.marginal_func(epsilon.unsqueeze(0), context=context).squeeze(0)
         dG_dt_fn = torch.func.jacfwd(marginal_func_wrapped) # take gradient wrt first parameter (t)
         dG_dt_vmap = vmap(dG_dt_fn) # run it 
         if t.device.type == "mps":
-            dG_dt = dG_dt_vmap(t.to("cpu"), data.to("cpu"), epsilon.to("cpu")).to(self.device)
+            dG_dt = dG_dt_vmap(t.to("cpu"), data.to("cpu"), data_mask.to("cpu") , epsilon.to("cpu")).to(self.device)
         else:
-            dG_dt = dG_dt_vmap(t.to(self.device), data.to(self.device), epsilon.to(self.device))
+            dG_dt = dG_dt_vmap(t.to(self.device), data.to(self.device), data_mask.to(self.device), epsilon.to(self.device))
         return dG_dt
 
 
-    def marginal_dt(self, epsilon, t, data):
+    def marginal_dt(self, epsilon, t, data, data_mask=None):
+        if data_mask is None: data_mask = torch.zeros(data.shape[0], data.shape[1], dtype=torch.bool, device=data.device)
         # all three gives the same result. I should test which one performs best.
         #return self.marginal_dt_vmap(epsilon, t, data)
         if self.diff_type == "vmap_func":
-            return self.marginal_dt_vmap(epsilon, t, data)
+            return self.marginal_dt_vmap(epsilon, t, data, data_mask)
         elif self.diff_type == "torch.autograd.functional.jvp":
-            return self.marginal_dt_autograd_functional_jvp(epsilon, t, data)
+            return self.marginal_dt_autograd_functional_jvp(epsilon, t, data, data_mask)
         elif self.diff_type == "torch.autograd.functional.jvp2":
-            return self.marginal_dt_autograd_functional_jvp2(epsilon, t, data)
+            return self.marginal_dt_autograd_functional_jvp2(epsilon, t, data, data_mask)
         else: print("ERROR")
 
-    def marginal_dt_autograd_functional_jvp(self, epsilon, t, data):
+    def marginal_dt_autograd_functional_jvp(self, epsilon, t, data, data_mask=None):
+        if data_mask is None: data_mask = torch.zeros(data.shape[0], data.shape[1], dtype=torch.bool, device=data.device)
         def marginal_func_wrapped(tt):
             with torch.enable_grad():
-                context = self.condition_mapper(tt, data)
+                context = self.condition_mapper(tt, data, data_mask)
                 return self.marginal_func(epsilon, context=context)
         func_out, jvp = torch.autograd.functional.jvp(func=marginal_func_wrapped, inputs=t, v=torch.ones_like(t), create_graph=True)
         return jvp
 
-    def marginal_dt_autograd_functional_jvp2(self, epsilon, t, data):
+    def marginal_dt_autograd_functional_jvp2(self, epsilon, t, data, data_mask=None):
+        if data_mask is None: data_mask = torch.zeros(data.shape[0], data.shape[1], dtype=torch.bool, device=data.device)
+
         def marginal_func_wrapped_2(tt, data, epsilon):
             with torch.enable_grad():
                 context = self.condition_mapper(tt, data)
                 return self.marginal_func(epsilon, context=context)
 
         func_out, jvp = torch.func.jvp(func=marginal_func_wrapped_2, 
-                                primals=(t, data, epsilon), 
-                                tangents=(torch.ones_like(t), torch.zeros_like(data), torch.zeros_like(epsilon)), create_graph=True)
+                                primals=(t, data, data_mask, epsilon), 
+                                tangents=(torch.ones_like(t), torch.zeros_like(data), torch.zeros_like(data_mask), torch.zeros_like(epsilon)), create_graph=True)
         return jvp
 
 
-    def marginal_dt_vmap(self, epsilon, t, data):
+    def marginal_dt_vmap(self, epsilon, t, data, data_mask=None):
         """
         Computes the time derivative of the marginal function.
 
@@ -140,21 +145,23 @@ class Marginal(nn.Module):
         Returns:
             torch.Tensor: Time derivative (shape: [batch_size, state_dim]).
         """
+        if data_mask is None: data_mask = torch.zeros(data.shape[0], data.shape[1], dtype=torch.bool, device=data.device)
+
         # get the partial derivative dG(t, X, epsilon)/dt 
         # we make a functional forward 
-        def marginal_func_wrapped(t, data, epsilon):
-            context = self.condition_mapper(t.unsqueeze(0), data.unsqueeze(0))
+        def marginal_func_wrapped(t, data, data_mask, epsilon):
+            context = self.condition_mapper(t.unsqueeze(0), data.unsqueeze(0), data_mask.unsqueeze(0))
             return self.marginal_func(epsilon.unsqueeze(0), context=context).squeeze(0)
         dG_dt_fn = torch.func.jacfwd(marginal_func_wrapped) # take gradient wrt first parameter (t)
         dG_dt_vmap = vmap(dG_dt_fn) # run it 
         if t.device.type == "mps":
-            dG_dt = dG_dt_vmap(t.to("cpu"), data.to("cpu"), epsilon.to("cpu")).to(self.device)
+            dG_dt = dG_dt_vmap(t.to("cpu"), data.to("cpu"), data_mask.to("cpu"),  epsilon.to("cpu")).to(self.device)
         else:
-            dG_dt = dG_dt_vmap(t.to(self.device), data.to(self.device), epsilon.to(self.device))
+            dG_dt = dG_dt_vmap(t.to(self.device), data.to(self.device),data_mask.to(self.device), epsilon.to(self.device))
         return dG_dt
 
 
-    def marginal_inv(self, state, t, data):
+    def marginal_inv(self, state, t, data, data_mask=None):
         """
         Computes the inverse of the marginal function.
 
@@ -166,11 +173,13 @@ class Marginal(nn.Module):
         Returns:
             torch.Tensor: Inverse (shape: [batch_size, latent_dim]).
         """
-        state, t, data = state.to(self.device), t.to(self.device), data.to(self.device)
-        conditions = self.condition_mapper(t, data)
+        if data_mask is None: data_mask = torch.zeros(data.shape[0], data.shape[1], dtype=torch.bool, device=data.device)
+
+        state, t, data, data_mask = state.to(self.device), t.to(self.device), data.to(self.device), data_mask.to(self.device)
+        conditions = self.condition_mapper(t, data, data_mask)
         return self.marginal_func.inverse(state, context=conditions)
 
-    def marginal_inv_and_log_prob(self, state, t, data):
+    def marginal_inv_and_log_prob(self, state, t, data, data_mask=None):
         """
         Computes the inverse of the marginal function and its log probability.
 
@@ -184,11 +193,12 @@ class Marginal(nn.Module):
                 - torch.Tensor: Inverse (shape: [batch_size, latent_dim]).
                 - torch.Tensor: Log probability (shape: [batch_size]).
         """
-        conditions = self.condition_mapper(t, data)
+        if data_mask is None: data_mask = torch.zeros(data.shape[0], data.shape[1], dtype=torch.bool, device=data.device)
+        conditions = self.condition_mapper(t, data, data_mask)
         eps = self.marginal_func.inverse(state, context=conditions)
         return eps, self.base_dist.log_prob(eps)
 
-    def sample(self, t, data, n_samples=1):
+    def sample(self, t, data, data_mask=None, n_samples=1):
         """
         Samples from the marginal distribution.
 
@@ -201,11 +211,12 @@ class Marginal(nn.Module):
             torch.Tensor: Sampled tensor (shape: [n_samples, state_dim]).
         """
         assert n_samples == 1, "Multiple samples are not yet implemented"
-        conditions = self.condition_mapper(t, data)
-        t, data = t.to(self.device), data.to(self.device)
+        if data_mask is None: data_mask = torch.zeros(data.shape[0], data.shape[1], dtype=torch.bool, device=data.device)
+        conditions = self.condition_mapper(t, data, data_mask)
+        t, data, data_mask = t.to(self.device), data.to(self.device), data_mask.to(self.device)
         return self.marginal_func.sample(num_samples=conditions.shape[0], context=conditions)[0]
 
-    def sample_and_log_prob(self, t, data, n_samples=1):
+    def sample_and_log_prob(self, t, data, data_mask=None, n_samples=1):
         """
         Samples from the marginal distribution and computes log probability.
 
@@ -220,11 +231,12 @@ class Marginal(nn.Module):
                 - torch.Tensor: Log probability (shape: [n_samples]).
         """
         assert n_samples == 1, "Multiple samples are not yet implemented"
-        conditions = self.condition_mapper(t, data)
-        t, data = t.to(self.device), data.to(self.device)
+        if data_mask is None: data_mask = torch.zeros(data.shape[0], data.shape[1], dtype=torch.bool, device=data.device)
+        conditions = self.condition_mapper(t, data, data_mask)
+        t, data, data_mask = t.to(self.device), data.to(self.device), data_mask.to(self.device)
         return self.marginal_func.sample(num_samples=conditions.shape[0], context=conditions)
 
-    def forward_and_log_prob(self, eps, t, data):
+    def forward_and_log_prob(self, eps, t, data, data_mask=None):
         """
         Performs the forward transformation and computes log probability.
 
@@ -238,12 +250,14 @@ class Marginal(nn.Module):
                 - torch.Tensor: Transformed tensor (shape: [batch_size, state_dim]).
                 - torch.Tensor: Log probability (shape: [batch_size]).
         """
-        eps, t, data = eps.to(self.device), t.to(self.device), data.to(self.device)
-        conditions = self.condition_mapper(t, data)
+        if data_mask is None: data_mask = torch.zeros(data.shape[0], data.shape[1], dtype=torch.bool, device=data.device)
+        eps, t, data, data_mask = eps.to(self.device), t.to(self.device), data.to(self.device), data_mask.to(self.device)
+        if data_mask is None: data_mask = torch.zeros(data.shape[0], data.shape[1], dtype=torch.bool, device=data.device)
+        conditions = self.condition_mapper(t, data, data_mask)
         sample, log_det = self.marginal_func.forward_and_log_det(z=eps, context=conditions)
         return sample, log_det + self.base_dist.log_prob(eps)
 
-    def log_prob(self, state, t, data):
+    def log_prob(self, state, t, data, data_mask=None):
         """
         Computes the log probability of the state.
 
@@ -255,11 +269,12 @@ class Marginal(nn.Module):
         Returns:
             torch.Tensor: Log probability (shape: [batch_size]).
         """
-        state, t, data = state.to(self.device), t.to(self.device), data.to(self.device)
-        conditions = self.condition_mapper(t, data)
+        if data_mask is None: data_mask = torch.zeros(data.shape[0], data.shape[1], dtype=torch.bool, device=data.device)
+        state, t, data, data_mask = state.to(self.device), t.to(self.device), data.to(self.device), data_mask.to(self.device)
+        conditions = self.condition_mapper(t, data, data_mask)
         return self.marginal_func.log_prob(state, context=conditions)
 
-    def ODEdrift(self, state, t, data):
+    def ODEdrift(self, state, t, data, data_mask=None):
         """
         Computes the drift term for the ODE.
 
@@ -271,22 +286,24 @@ class Marginal(nn.Module):
         Returns:
             torch.Tensor: Drift term (shape: [batch_size, state_dim]).
         """
-        state, t, data = state.to(self.device), t.to(self.device), data.to(self.device)
-        eps = self.marginal_inv(state, t, data)
-        marginal_dt = self.marginal_dt(eps, t, data)
+        if data_mask is None: data_mask = torch.zeros(data.shape[0], data.shape[1], dtype=torch.bool, device=data.device)
+        state, t, data, data_mask = state.to(self.device), t.to(self.device), data.to(self.device), data_mask.to(self.device)
+        eps = self.marginal_inv(state, t, data, data_mask)
+        marginal_dt = self.marginal_dt(eps, t, data, data_mask)
         return marginal_dt
     
 
-    def log_prob_grad(self, epsilon, t, data):
+    def log_prob_grad(self, epsilon, t, data, data_mask=None):
         # all three gives the same result. I should test which one performs best.
         #return self.marginal_dt_vmap(epsilon, t, data)
+        if data_mask is None: data_mask = torch.zeros(data.shape[0], data.shape[1], dtype=torch.bool, device=data.device)
         if self.diff_type == "vmap_func":
-            return self.log_prob_grad_vmap(epsilon, t, data)
+            return self.log_prob_grad_vmap(epsilon, t, data, data_mask)
         elif self.diff_type == "torch.autograd.functional.jvp":
-            return self.log_prob_grad_autograd_functional_jvp(epsilon, t, data)
+            return self.log_prob_grad_autograd_functional_jvp(epsilon, t, data, data_mask)
         else: print("ERROR")
 
-    def log_prob_grad_vmap(self, state, t, data):
+    def log_prob_grad_vmap(self, state, t, data, data_mask=None):
         """
         Computes the gradient of the log probability with respect to the state.
 
@@ -298,30 +315,31 @@ class Marginal(nn.Module):
         Returns:
             torch.Tensor: Gradient of log probability (shape: [batch_size, state_dim]).
         """
-        def log_prob_func(state, t, data): 
-            return self.log_prob(state.unsqueeze(0), t.unsqueeze(0), data.unsqueeze(0)).squeeze(0)
+        if data_mask is None: data_mask = torch.zeros(data.shape[0], data.shape[1], dtype=torch.bool, device=data.device)
+        def log_prob_func(state, t, data, data_mask): 
+            return self.log_prob(state.unsqueeze(0), t.unsqueeze(0), data.unsqueeze(0), data_mask.unsqueeze(0)).squeeze(0)
         if self.is_normflow:
             # here we cannot use vmap because normflows uses some inplace arithmetics at some point. And that does not work together.
             log_prob_grad_fn = torch.func.jacrev(log_prob_func) # function that returns gradient of log_prob wrt first parameter (state)
             for i in range(len(state)):
-                log_prob_grad_ = log_prob_grad_fn(state[i], t[i], data[i])
+                log_prob_grad_ = log_prob_grad_fn(state[i], t[i], data[i], data_mask[i]) # shape (state_dim)
                 if i == 0:
                     log_prob_grad_res = torch.zeros([len(state), *log_prob_grad_.shape], device=self.device)
                 log_prob_grad_res[i] = log_prob_grad_
             #log_prob_grad_res = log_prob_grad_res[:,0,:]
         else: 
             log_prob_grad_fn = torch.func.jacrev(log_prob_func) # function that returns gradient of log_prob wrt first parameter (state)
-            log_prob_grad_res = vmap(log_prob_grad_fn)(state, t, data)
+            log_prob_grad_res = vmap(log_prob_grad_fn)(state, t, data, data_mask)
         return log_prob_grad_res
 
-    def log_prob_grad_autograd_functional_jvp(self, state, t, data):
+    def log_prob_grad_autograd_functional_jvp(self, state, t, data, data_mask):
         def log_prob_func(state): 
-            return self.log_prob(state, t, data)
+            return self.log_prob(state, t, data, data_mask)
         func_out, vjp = torch.autograd.functional.vjp(func=log_prob_func, inputs=state, v=torch.ones(state.shape[0], device=self.device), create_graph=True)
         return vjp
 
 
-    def SDEbackdrift(self, state, t, data):
+    def SDEbackdrift(self, state, t, data, data_mask=None):
         """
         Computes the backward drift term for the SDE.
 
@@ -333,15 +351,16 @@ class Marginal(nn.Module):
         Returns:
             torch.Tensor: Backward drift term (shape: [batch_size, state_dim]).
         """
-        state, t, data = state.to(self.device), t.to(self.device), data.to(self.device)
-        ODEdrift = self.ODEdrift(state, t, data)
+        if data_mask is None: data_mask = torch.zeros(data.shape[0], data.shape[1], dtype=torch.bool, device=data.device)
+        state, t, data, data_mask = state.to(self.device), t.to(self.device), data.to(self.device), data_mask.to(self.device)
+        ODEdrift = self.ODEdrift(state, t, data, data_mask)
         sigma_squared = self.diffusion_term.sigma_squared(state, t)
         sigma_squared_grad = self.diffusion_term.sigma_squared_grad_sum(state, t)
-        log_prob_grad = self.log_prob_grad(state, t, data)
+        log_prob_grad = self.log_prob_grad(state, t, data, data_mask)
         SDE_backdrift = ODEdrift - 0.5 * torch.einsum("bkk, bk -> bk", sigma_squared, log_prob_grad) - 0.5 * sigma_squared_grad
         return SDE_backdrift
 
-    def SDEforwarddrift(self, state, t, data):
+    def SDEforwarddrift(self, state, t, data, data_mask=None):
         """
         Computes the forward drift term for the SDE.
 
@@ -353,11 +372,12 @@ class Marginal(nn.Module):
         Returns:
             torch.Tensor: Forward drift term (shape: [batch_size, state_dim]).
         """
-        state, t, data = state.to(self.device), t.to(self.device), data.to(self.device)
-        ODEdrift = self.ODEdrift(state, t, data)
+        if data_mask is None: data_mask = torch.zeros(data.shape[0], data.shape[1], dtype=torch.bool, device=data.device)
+        state, t, data, data_mask = state.to(self.device), t.to(self.device), data.to(self.device), data_mask.to(self.device)
+        ODEdrift = self.ODEdrift(state, t, data, data_mask)
         sigma_squared = self.diffusion_term.sigma_squared(state, t)
         sigma_squared_grad = self.diffusion_term.sigma_squared_grad_sum(state, t)
-        log_prob_grad = self.log_prob_grad(state, t, data)
+        log_prob_grad = self.log_prob_grad(state, t, data, data_mask)
         SDEforwarddrift = ODEdrift + 0.5 * torch.einsum("bkk, bk -> bk", sigma_squared, log_prob_grad) + 0.5 * sigma_squared_grad
         return SDEforwarddrift
 
