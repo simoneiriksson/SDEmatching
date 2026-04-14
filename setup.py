@@ -1,7 +1,8 @@
+from setuptools import setup
 setup(
        # the name must match the folder name 'verysimplemodule'
-        name="SDEMatching", 
-        packages=["SDEMatching"],
+        name="SDEmatching", 
+        packages=["SDEmatching"],
         install_requires=[
 "gpytorch>=1.14",
 "matplotlib>=3.10.3",
