@@ -7,7 +7,7 @@ from torchsde import BrownianInterval
 
 #from Prior import GaussianPrior
 import matplotlib.pyplot as plt
-from SDEMatching.utils import to_tensor
+from ..utils.utils import to_tensor
 
 def manual_euler_sample(drift, diffusion, n_samples=1, init_state=None, ts=None, bm=None, sde_type=True):
     """
@@ -97,6 +97,8 @@ class SDE(nn.Module):
         self.prior = prior
         self.t_start = to_tensor(t_start).to(self.device)
         self.t_end = to_tensor(t_end).to(self.device)
+        self.steps = steps
+        
         if ts is None:
             self.ts = torch.linspace(self.t_start, self.t_end, steps, device=self.device)
         else:

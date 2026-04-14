@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from SDEMatching.utils import to_tensor
+from ..utils.utils import to_tensor
 
 class Diffusion(nn.Module):
     """
@@ -223,7 +223,7 @@ class NNDiffusion(Diffusion):
         Returns:
             torch.Tensor: Diffusion matrix (shape: [batch_size, state_dim, brownian_dim]).
         """
-        return self.net(state, t).reshape(t.shape[0], self.state_dim, self.state_dim)
+        return self.net(state, t).reshape(t.shape[0], self.state_dim, self.brownian_dim)
     
 
 

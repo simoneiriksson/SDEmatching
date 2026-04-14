@@ -11,7 +11,7 @@ def plot_parameter_history(true_parameter_dict, saved_parameter_dict, step_no):
         for i in range(val_tensor.shape[1]):
             #print(f"{key}, {i}", {val_tensor[:,i]})
             color=cmap(i/val_tensor.shape[1])
-            axes[0, ax_no].plot(val_tensor[:,i], color=color)
+            axes[0, ax_no].plot(val_tensor[:,i].detach().cpu(), color=color)
         axes[0, ax_no].set_title(f"{key}")
 
     for ax_no, (key, val_tensor) in enumerate(true_parameter_dict.items()):
@@ -20,7 +20,7 @@ def plot_parameter_history(true_parameter_dict, saved_parameter_dict, step_no):
         for i in range(val_tensor.shape[1]):
             #print(f"{key}, {i}", {val_tensor[:,i]})
             color=cmap(i/val_tensor.shape[1])
-            axes[0, ax_no].hlines(val_tensor[:,i], xmin=0, xmax=step_no, color=color)
+            axes[0, ax_no].hlines(val_tensor[:,i].detach().cpu(), xmin=0, xmax=step_no, color=color)
     return fig, axes
 
 def plot_marginal(sdeproblem, data, state_dim, axes=None, fig=None, true_states=None, true_states_ts=None, num_timesteps=30,
@@ -77,7 +77,7 @@ def plot_marginal(sdeproblem, data, state_dim, axes=None, fig=None, true_states=
                                  (marginal_samples_mean[:,i,dimension] + marginal_samples_std[:,i,dimension]*1.94).detach().cpu(), alpha=.5, color=color)  # plot std bands for marginal distribution
             this_ax.plot(data[i,:,0].detach().cpu(), data[i,:,dimension+1].detach().cpu(), color=color, linewidth=0, marker="x") # plot the sampled data poitns
             this_ax.plot(true_states_ts.detach().cpu(), true_states[i,:,dimension].T.detach().cpu(), marker="", c=color) # plot the true underlying SDE
-            this_ax.plot(sdeproblem.SDE.ts.detach().cpu(), simulation_samples[:,i, dimension].detach().cpu(), c=color, linestyle=":")
+            #this_ax.plot(sdeproblem.SDE.ts.detach().cpu(), simulation_samples[:,i, dimension].detach().cpu(), c=color, linestyle=":")
         #this_ax.set_title(f"samples from marginal distribution, {dimension} dimension")
     
     return fig, axes

@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from SDEMatching.utils import torch_seed
+from SDEmatching.utils.utils import torch_seed
 
 class FunctionApproximatorModel(torch.nn.Module):
     """

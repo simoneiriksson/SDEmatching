@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import normflows as nf
-from SDEMatching.utils import to_tensor
+from ..utils.utils import to_tensor
 class Emission(nn.Module):
     """
     Base class for emission functions.

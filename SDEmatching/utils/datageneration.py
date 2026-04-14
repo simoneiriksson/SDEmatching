@@ -9,7 +9,7 @@ import torch
 # from SDE import SimpleDiffusion, SimpleDrift, SimpleSDE, SDE
 # from Emission import Emission, DistEmission, GaussianEmission, NFEmission
 import matplotlib.pyplot as plt
-from SDEMatching.utils import torch_seed
+from ..utils.utils import torch_seed
 
 
 
