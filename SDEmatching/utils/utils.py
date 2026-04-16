@@ -26,10 +26,10 @@ def to_tensor(data):
     return torch.tensor(data) if not isinstance(data, torch.Tensor) else data
 
 
-def mask_and_pad(list_of_timeseries, list_of_state_timeseries, state_dim, device):
+def mask_and_pad(list_of_timeseries, list_of_state_timeseries, observation_dim, device):
     num_series = len(list_of_timeseries)
     emissions_longest_len = max([len(timeseries) for timeseries in list_of_timeseries])
-    emissions_padded = torch.zeros(num_series, emissions_longest_len, state_dim+1, device=device)
+    emissions_padded = torch.zeros(num_series, emissions_longest_len, observation_dim+1, device=device)
     emissions_mask = torch.ones(num_series, emissions_longest_len, dtype=torch.bool, device=device)  # True = padding
 
     for i, ts in enumerate(list_of_timeseries):
@@ -40,3 +40,17 @@ def mask_and_pad(list_of_timeseries, list_of_state_timeseries, state_dim, device
 
     data = emissions_padded.detach().clone()
     return data, emissions_mask
+
+
+# Saving true parameters to list, for plotting
+def save_models(parameter_dict, models_to_be_saved):
+    for model_to_be_saved in models_to_be_saved:
+        for parameter_name, parameter_value in model_to_be_saved.named_parameters():
+            if parameter_value.data.dim:
+                val = parameter_value.data.unsqueeze(0)
+            else: val = parameter_value.data
+            val = val.ravel().unsqueeze(0)
+            fullname = f"{model_to_be_saved._get_name()}.{parameter_name}"
+            if fullname in parameter_dict.keys():
+                parameter_dict[fullname] = torch.cat([parameter_dict[fullname], val.clone().detach()])
+            else: parameter_dict[fullname] = val.clone().detach()

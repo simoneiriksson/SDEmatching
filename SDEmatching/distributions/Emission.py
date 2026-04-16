@@ -90,10 +90,14 @@ class GaussianEmission(Emission):
         sample: Samples emissions from the Gaussian distribution.
         log_prob: Computes the log-probability of emissions.
     """
-    def __init__(self, log_std=0.0, dim=None, device='cpu', trainable=False):
+    def __init__(self, log_std=0.0, dim=None, observation_dim=None, device='cpu', trainable=False):
         super(GaussianEmission, self).__init__()
         assert dim is not None
         self.dim = dim
+        if observation_dim is None:
+            self.observation_dim = dim
+        else:
+            self.observation_dim = observation_dim
         self.device = device
         self.trainable = trainable
         if trainable:
@@ -117,7 +121,7 @@ class GaussianEmission(Emission):
         #return eps * self.log_std.exp() + state.unsqueeze(0)
         
         return torch.distributions.MultivariateNormal(
-            state, torch.eye(state.shape[1], device=self.device) * (self.log_std * 2).exp()).sample((1,))
+            state[:, 0:self.observation_dim], torch.eye(self.observation_dim, device=self.device) * (self.log_std * 2).exp()).sample((1,))
 
 
     def log_prob(self, sample, state):
@@ -132,7 +136,7 @@ class GaussianEmission(Emission):
             torch.Tensor: Log-probabilities (shape: [n_samples, batch_size]).
         """
         sample, state = sample.to(self.device), state.to(self.device)
-        logprob = torch.distributions.MultivariateNormal(state, torch.eye(state.shape[1], device=self.device) * (self.log_std * 2).exp()).log_prob(sample)
+        logprob = torch.distributions.MultivariateNormal(state[:, 0:self.observation_dim], torch.eye(self.observation_dim, device=self.device) * (self.log_std * 2).exp()).log_prob(sample)
         return logprob
     
 class NFEmission(Emission):
