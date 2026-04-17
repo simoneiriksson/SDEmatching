@@ -35,7 +35,7 @@ where $z_t = F_\phi(\varepsilon, t, X)$ is a sample from it.
 In this implementation $q_\phi$ is chosen to be Gaussian, conditional on the inputs $t$ and $X$, but this can be excanged with any distribution as long as $F$ is invertible in $\varepsilon$ and differentiable in $t$. Any normalizing flow conditional on $X$ and $t$ will do.
 
 Now define the time derivative of $F_\phi$, given a fixed sample of $\varepsilon$:
-$$\bar{f}_{\phi}(z_{t},t,X)=\left.\frac{\partial F_{\phi}(\varepsilon,t,X)}{\partial t}\right|_{\varepsilon=F_{\phi}^{-1}(z_{t},t,X)}. \tag{3}
+$$\bar{f}_{\phi}(z_{t},t,X)=\frac{\partial F_{\phi}(\varepsilon,t,X)}{\partial t}\Big\vert_{\varepsilon=F_{\phi}^{-1}(z_{t},t,X)}. \tag{3}
 $$
 
 Starting from $z_t \sim q(z_t\vert X)$ and integrating the ODE 
