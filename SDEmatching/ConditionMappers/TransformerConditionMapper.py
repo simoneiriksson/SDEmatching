@@ -82,7 +82,7 @@ class TimeDecoder(nn.Module):
         mu, log_sigma = out.chunk(2, dim=-1)
         return mu, log_sigma
 
-class TransformerLatentModel(nn.Module):
+class TransformerConditionMapper(nn.Module):
     def __init__(self, obs_dim, state_dim, model_dim=128, time_embed_dim=32, n_heads=4, n_layers=8):
         super().__init__()
         self.encoder = TransformerContextEncoder(obs_dim, model_dim, n_heads, n_layers, time_embed_dim)

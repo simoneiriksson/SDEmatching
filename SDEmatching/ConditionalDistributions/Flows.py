@@ -336,16 +336,6 @@ class DDPMflow(nf.flows.Flow):
         ts = context[:, 0]
         t1 = context[:, 1]
         X1 = context[:, 2:]
-        # print(f"{ts.shape = }, {X1.shape = }")
-        # print(f"{self.mean_func(ts).shape = }, {self.diff_func(ts).shape = }")
-        # print(f"{z.shape = }")
-        # print(f"{(self.diff_func(ts).unsqueeze(1) * z).shape = }")
-        # print(f"{(self.mean_func(ts).unsqueeze(1) * X1).shape = }")
-
-        # log_det = torch.slogdet(self.diff_func(ts))[0] # correct this
-        # # z_ = sigma(t,z) @ z + m(t,z)*X1
-        # mul = torch.einsum("bmk, bk -> bk", self.diff_func(ts) , z)
-        # z_ =  mul + self.mean_func(ts).unsqueeze(1) * X1
         log_det = -self.std_func(ts).log() * X1.shape[1]
         z_ = z * self.std_func(ts).unsqueeze(1) + self.mean_func(ts).unsqueeze(1) * X1
         # print(f"{log_det.shape = }")
