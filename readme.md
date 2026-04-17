@@ -16,12 +16,15 @@ Key idea (theory) in 1–2 screens:
 
 The following is paraphrased from the paper [[1]](#ref-1).
 We assume the existence of an SDE on the form
+
 $$dz_t = f(z_t, t) dt + \sigma(z_t, t) dW_t$$
+
 with prior distribution $p_0(z_0)$ and emission distribution $p_e(x\vert z_t)$. Here $dW_t$ is a Wiener process. The function $f(z_t, t)$ is called the *drift* and $\sigma(z_t, t)$ is the *diffusion term*, which is function that returns a matrix.
 
 This process generates a set of series of observation, each of which of the form $X=[x_{t_1}, x_{t_2}, ..., x_{t_N}]$. In the following, we just assume that there is one single sampled series of observations, but the implementation works with a set of samples.
 
 The problem, which the paper address is how to estimate the drift $f_\theta$, diffusion $\sigma_\theta$, prior $q_0$ and emission $q_e$ distributions such that the SDE
+
 $$ dz_t = f_\theta(z_t, t) dt + \sigma_\theta(z_t, t) dW_t$$
 
 generates similar data.
@@ -36,13 +39,16 @@ where $z_t = F_\phi(\varepsilon, t, X)$ is a sample from it.
 In this implementation $q_\phi$ is chosen to be Gaussian, conditional on the inputs $t$ and $X$, but this can be excanged with any distribution as long as $F$ is invertible in $\varepsilon$ and differentiable in $t$. Any normalizing flow conditional on $X$ and $t$ will do.
 
 Now define the time derivative of $F_\phi$, given a fixed sample of $\varepsilon$:
+
 $$\bar{f}_{\phi}(z_{t},t,X)=\frac{\partial F_{\phi}(\varepsilon,t,X)}{\partial t}\Big\vert_{\varepsilon=F_{\phi}^{-1}(z_{t},t,X)}.
 $$
 
 Starting from $z_t \sim q(z_t\vert X)$ and integrating the ODE 
+
 $$
 dz_t = \bar{f}_{\phi}(z_{t},t,X) dt
 $$
+
 we then get a sample from the variational marginal distribution $q_\phi(z_t\vert X)$.
 
 We are now interested in minimizing the KL-divergence between $q_\phi(z_t\vert X)$ and $p_\theta(z_t)$ over path measures. By Girsanovs theorem, this is finite if both processes share the same diffusion term $\sigma_\theta$.
@@ -50,22 +56,29 @@ We are now interested in minimizing the KL-divergence between $q_\phi(z_t\vert X
 Let 
 $\sigma^2_\theta(z_t, t)$ be a shorthand for $\sigma_\theta(z_t, t)\sigma_\theta(z_t, t)^\top$.
 If we then define 
+
 $$
 f_\phi(z_t, t, X) = \bar{f}_{\phi}(z_{t},t,X) + \frac{1}{2}\sigma^2_\theta(z_t, t) \nabla_{z_t} \ln q_\phi(z_t\vert X) + 
 \frac{1}{2}\nabla_{z_t}  \sigma^2_\theta(z_t, t),$$
+
 then a result in [[4]](#ref-4) gives us that the SDE defiend by 
+
 $$
 dz_t = f_\phi(z_t, t, X) dt + \sigma_\theta(z_t, t) dW_t
 $$
+
 *also* has the marginal distribution $q_\phi(z_t\vert X)$, regardless of what $\sigma_\theta$ looks like.
 
 Now, if we approximate $f_\phi(z_t, t, X)$ by a neural network $f_\theta(z_t, t)$, then we will in turn have an SDE which also approximately has the same marginal distribution as the variational marginal distribution $q_\phi(z_t\vert X)$.
 
 This means that if we also get an approximation $q_e$ of the emission distribution, then we can couple everything together and calculate an Evidence Lower Bound as 
+
 $$
 ELBO(\theta) = \mathcal{L}_{\text{prior}} + \mathcal{L}_{\text{diff}} + \mathcal{L}_{\text{rec}},
 $$ 
+
 where 
+
 $$\mathcal{L}_{\text{prior}} = D_{KL}(q_\phi(z_0|X) \| p_\theta(z_0))$$
  
 $$\mathcal{L}_{\text{rec}} = -\log p_\theta(x_{t_i}|z_{t_i})$$
