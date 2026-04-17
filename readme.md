@@ -21,7 +21,10 @@ with prior distribution $p_0(z_0)$ and emission distribution $p_e(x\vert z_t)$. 
 
 This process generates a set of series of observation, each of which of the form $X=[x_{t_1}, x_{t_2}, ..., x_{t_N}]$. In the following, we just assume that there is one single sampled series of observations, but the implementation works with a set of samples.
 
-The problem, which the paper address is how to estimates the drift $f_\theta$, diffusion $\sigma_\theta$, prior $q_0$ and emission $q_e$ distributions from data.
+The problem, which the paper address is how to estimate the drift $f_\theta$, diffusion $\sigma_\theta$, prior $q_0$ and emission $q_e$ distributions such that the SDE
+$$dz_t = f_\theta(z_t, t) dt + \sigma_\theta(z_t, t) dW_t, \tag{2}$$
+generates similar data.
+
 
 This can be done by defining a variational conditional marginal distribution 
 that correpsonds to the latent states:
@@ -36,26 +39,34 @@ Starting from $z_t \sim q(z_t\vert X)$ and integrating the ODE
 $$
 dz_t = \bar{f}_{\phi}(z_{t},t,X) dt
 $$
-we then get a sample from $q_\phi(z_t\vert X)$.
+we then get a sample from the variational marginal distribution $q_\phi(z_t\vert X)$.
 
-Now let $\sigma_\theta(z_t, t)$ be any matrix-valued function and let 
+We are now interested in minimizing the KL-divergence between $q_\phi(z_t\vert X)$ and $p_\theta(z_t)$ over path measures. By Girsanovs theorem, this is finite if both processes share the same diffusion term $\sigma_\theta$.
 
+Let 
 $\sigma^2_\theta(z_t, t)$ be a shorthand for $\sigma_\theta(z_t, t)\sigma_\theta(z_t, t)^\top$.
 If we then define 
 $$
 f_\phi(z_t, t, X) = \bar{f}_{\phi}(z_{t},t,X) + \frac{1}{2}\sigma^2_\theta(z_t, t) \nabla_{z_t} \ln q_\phi(z_t\vert X) + 
 \frac{1}{2}\nabla_{z_t}  \sigma^2_\theta(z_t, t),$$
-
 then a result in [[4]](#ref-4) gives us that the SDE defiend by 
 $$
 dz_t = f_\phi(z_t, t, X) dt + \sigma_\theta(z_t, t) dW_t
 $$
-has the marginal distribution $q_\phi(z_t\vert X)$.
+*also* has the marginal distribution $q_\phi(z_t\vert X)$, regardless of what $\sigma_\theta$ looks like.
 
-Now, if we approximate $f_\phi(z_t, t, X)$ by a neural network $f_\theta(z_t, t, X)$, then we will in turn have an SDE which also approximately has the same marginal distribution as the variational distribution $q_\phi(z_t\vert X)$.
+Now, if we approximate $f_\phi(z_t, t, X)$ by a neural network $f_\theta(z_t, t)$, then we will in turn have an SDE which also approximately has the same marginal distribution as the variational marginal distribution $q_\phi(z_t\vert X)$.
 
-This means that if we also get an approximation $q_e$ of the emission distribution, then we can couple together everything and have a 
+This means that if we also get an approximation $q_e$ of the emission distribution, then we can couple everything together and calculate an Evidence Lower Bound as 
+$$
+ELBO(\theta) = \mathcal{L}_{\text{prior}} + \mathcal{L}_{\text{diff}} + \mathcal{L}_{\text{rec}},
+$$ 
+where 
+$$\mathcal{L}_{\text{prior}} = D_{KL}(q_\phi(z_0|X) \| p_\theta(z_0))$$
+ 
+$$\mathcal{L}_{\text{rec}} = -\log p_\theta(x_{t_i}|z_{t_i})$$
 
+$$\mathcal{L}_{\text{diff}} = \tfrac{1}{2}\|\sigma_\theta^{-1}(z_t, t)(f_\theta(z_t, t) - f_\phi(z_t, t, X))\|^2$$
 
 ## Implementation
 <!--- 
