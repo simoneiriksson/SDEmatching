@@ -3,7 +3,7 @@ One-paragraph summary:
 - What problem, what you contribute, what the key result is. 
 --->
 # SDEmatching
-This repo implements the 2025 paper SDE Matching: Scalable and Simulation-Free Training of Latent Stochastic Differential Equations, by Bartosh, Vetrov, and Naesseth [[1]](#ref-1). The paper shows that it is possible to train a Stochastich Differential Equation (SDE) to fit data in a simulation free manner, by score-ematching between the trained model and a variational data approximation.
+This repo implements the 2025 paper SDE Matching: Scalable and Simulation-Free Training of Latent Stochastic Differential Equations, by Bartosh, Vetrov, and Naesseth [[1]](#ref-1). The paper shows that it is possible to train a Stochastic Differential Equation (SDE) to fit data in a simulation free manner, by score matching between the trained model and a variational data approximation.
 
 <!--- 
 Key idea (theory) in 1–2 screens:
@@ -12,7 +12,7 @@ Key idea (theory) in 1–2 screens:
 - A short “why it matters / when it fails” section.
 - One figure if you have it.
 --->
-## Score matchin SDEs against variational approximation
+## Score matching SDEs against variational approximation
 
 The following is paraphrased from the paper [[1]](#ref-1).
 We assume the existence of an SDE on the form
@@ -28,11 +28,14 @@ generates similar data.
 
 This can be done by defining a variational conditional marginal distribution 
 that correpsonds to the latent states:
-$z_t = F_\phi(\varepsilon, t, X)$, where $\varepsilon\sim \mathcal(0,I)$. Then let $q_\phi(z_t\vert X) = F_\phi(\varepsilon, t, X)$. 
+$z_t = F_\phi(\varepsilon, t, X)$, where $\varepsilon\sim \mathcal{N}(0,I)$. 
+This transformation implicitly defines the conditional distribution $q_\phi(z_t\vert X)$, 
+where $z_t = F_\phi(\varepsilon, t, X)$ is a sample from it.
+
 In this implementation $q_\phi$ is chosen to be Gaussian, conditional on the inputs $t$ and $X$, but this can be excanged with any distribution as long as $F$ is invertible in $\varepsilon$ and differentiable in $t$. Any normalizing flow conditional on $X$ and $t$ will do.
 
 Now define the time derivative of $F_\phi$, given a fixed sample of $\varepsilon$:
-$$\bar{f}_{\phi}(z_{t},t,X)=\left.\frac{\partial F_{\phi}(\varepsilon,t,X)}{\partial t}\right|_{\varepsilon=F_{\phi}^{-1}(z_{t},t,X)}. \tag{2}
+$$\bar{f}_{\phi}(z_{t},t,X)=\left.\frac{\partial F_{\phi}(\varepsilon,t,X)}{\partial t}\right|_{\varepsilon=F_{\phi}^{-1}(z_{t},t,X)}. \tag{3}
 $$
 
 Starting from $z_t \sim q(z_t\vert X)$ and integrating the ODE 
@@ -81,7 +84,7 @@ As explained above, the main obstacle with this model is how to construct the va
 
 In contrast, I have used a Gaussian Process, which generates an estimate of the mean and variance, but also generates an estimate of the derivative of the mean, and the variance of the derivative of the mean. This works very well for a simple physics system with restrictions to the drift matrix.
 
-However, none of these generalizes. In the original paper, the authors use the ODE-RNN introduced by Rubanova et al. in [2](#ref-2).
+However, none of these generalizes. In the original paper, the authors use the ODE-RNN introduced by Rubanova et al. in [2](#ref-2). I personally do not like this approach, since it breaks with the simulation free spirit of the SDE matching method.
 
 My suggestion for further research would be to use a 1D convolutional network that maps from `observation_dim * series_length` to `latent_dim * series_length` and then perhaps use a deep kernel [3](#ref-3) for further refinement.
 
