@@ -40,13 +40,13 @@ In this implementation $q_\phi$ is chosen to be Gaussian, conditional on the inp
 
 Now define the time derivative of $F_\phi$, given a fixed sample of $\varepsilon$:
 
-$$\bar{f}_{\phi}(z_{t},t,X)=\frac{\partial F_{\phi}(\varepsilon,t,X)}{\partial t}\Big\vert_{\varepsilon=F_{\phi}^{-1}(z_{t},t,X)}.
+$$\overline{f}_{\phi}(z_{t},t,X)=\frac{\partial F_{\phi}(\varepsilon,t,X)}{\partial t}\Big\vert_{\varepsilon=F_{\phi}^{-1}(z_{t},t,X)}.
 $$
 
 Starting from $z_t \sim q(z_t\vert X)$ and integrating the ODE 
 
 $$
-dz_t = \bar{f}_{\phi}(z_{t},t,X) dt
+dz_t = \overline{f}_{\phi}(z_{t},t,X) dt
 $$
 
 we then get a sample from the variational marginal distribution $q_\phi(z_t\vert X)$.
@@ -58,7 +58,7 @@ $\sigma^2_\theta(z_t, t)$ be a shorthand for $\sigma_\theta(z_t, t)\sigma_\theta
 If we then define 
 
 $$
-f_\phi(z_t, t, X) = \bar{f}_{\phi}(z_{t},t,X) + \frac{1}{2}\sigma^2_\theta(z_t, t) \nabla_{z_t} \ln q_\phi(z_t\vert X) + 
+f_\phi(z_t, t, X) = \overline{f}_{\phi}(z_{t},t,X) + \frac{1}{2}\sigma^2_\theta(z_t, t) \nabla_{z_t} \ln q_\phi(z_t\vert X) + 
 \frac{1}{2}\nabla_{z_t}  \sigma^2_\theta(z_t, t),$$
 
 then a result in [[4]](#ref-4) gives us that the SDE defiend by 
