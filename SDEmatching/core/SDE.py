@@ -59,11 +59,11 @@ class SimpleSDE(nn.Module):
         f (callable): Drift function with inputs t (scalar) and x (tensor of shape [batch_size, state_dim]).
         g (callable): Diffusion function with inputs t (scalar) and x (tensor of shape [batch_size, state_dim]).
     """
-    def __init__(self, drift, difussion, sde_type="ito", noise_type="general", device='cpu'):
+    def __init__(self, drift, diffusion, sde_type="ito", noise_type="general", device='cpu'):
         super(SimpleSDE, self).__init__()
         self.device = device
         self.drift = drift
-        self.diffusion = difussion
+        self.diffusion = diffusion
 
         self.f = lambda t, x: self.drift(x.to(self.device), t.to(self.device).unsqueeze(0).repeat(x.shape[0])).squeeze(0)
         self.g = lambda t, x: self.diffusion(x.to(self.device), t.to(self.device).unsqueeze(0).repeat(x.shape[0])).squeeze(0)
