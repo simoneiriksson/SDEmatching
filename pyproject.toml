@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "SDEmatching"
-version = "0.1.0"
+version = "0.1.1"
 description = "Scalable and simulation-free training of latent SDEs via score matching (Bartosh et al., 2025)"
 readme = "README_pypi.md"
 license = { text = "MIT" }
