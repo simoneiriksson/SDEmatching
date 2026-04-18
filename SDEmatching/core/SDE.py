@@ -5,7 +5,6 @@ from torchdyn.core import NeuralODE, NeuralSDE
 from torchsde import sdeint
 from torchsde import BrownianInterval
 
-#from Prior import GaussianPrior
 import matplotlib.pyplot as plt
 from ..utils.utils import to_tensor
 

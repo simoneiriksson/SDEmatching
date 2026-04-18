@@ -1,5 +1,5 @@
-from SDEmatching.core.SDE import SDE
-from SDEmatching.core.Marginal import Marginal
+from ..core.SDE import SDE
+from ..core.Marginal import Marginal
 import torch
 
 
